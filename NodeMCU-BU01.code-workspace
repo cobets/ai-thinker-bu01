@@ -1,0 +1,21 @@
+{
+	"folders": [
+		{
+			"path": "NodeMCU-BU01-Tag"
+		},
+		{
+			"name": "NodeMCU-BU01-Anchor",
+			"path": "NodeMCU-BU01-Anchor"
+		},
+		{
+			"name": "ai-thinker-bu01",
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"string": "cpp",
+			"string_view": "cpp"
+		}
+	}
+}
