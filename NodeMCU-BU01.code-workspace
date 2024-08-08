@@ -4,12 +4,10 @@
 			"path": "NodeMCU-BU01-Tag"
 		},
 		{
-			"name": "NodeMCU-BU01-Anchor",
 			"path": "NodeMCU-BU01-Anchor"
 		},
 		{
-			"name": "ai-thinker-bu01",
-			"path": "."
+			"path": "DW1000"
 		}
 	],
 	"settings": {
