@@ -18,17 +18,17 @@
 #include "DW1000.h"
 #include "ardupilot.h"
 
+// #define TAG_DEBUG
 
-#define CONFIG_VALIDATION_KEY 214748361
+#define CONFIG_VALIDATION_KEY 214748360
 #define DEFAULT_ADDRESS "7D:00:22:EA:82:60:3B:9C"
-#define DEFAULT_ANTENNA_DELAY 16384
+// #define DEFAULT_ANTENNA_DELAY 16384
 #define N_ANCHORS 4
 
 struct TagConfig {
   int      validKey;              // Validation key. Must By equal to CONFIG_VALIDATION_KEY is config was saved
   char     mode;                  // C or R (calibrate or run)
   char     address[24];           // MAC address of anchor
-  int      adelay;                // Antenna delay
   float    aMatrix[N_ANCHORS][3]; // Anchors coordinates matrix [0,1,2,3][x,y,z]
                                   // Z values are ignored in this code, except to compute RMS distance error
   byte      dw1000Mode;           // DW1000 modes
@@ -51,7 +51,6 @@ void loadTagConfig() {
     fConfig.validKey = CONFIG_VALIDATION_KEY;
     fConfig.mode = 'R';
     strcpy(fConfig.address, DEFAULT_ADDRESS);
-    fConfig.adelay = DEFAULT_ANTENNA_DELAY;
     fConfig.dw1000Mode = 1;
     fConfig.aMatrix[0][0] = 0.0;  fConfig.aMatrix[0][1] = 0.0;  fConfig.aMatrix[0][2] = 0.97;
     fConfig.aMatrix[1][0] = 3.99; fConfig.aMatrix[1][1] = 5.44; fConfig.aMatrix[1][2] = 1.14;
@@ -66,12 +65,11 @@ void saveTagConfig() {
 }
 
 void printTagConfig() {
+#ifndef TAG_DEBUG
   Serial1.print(" Tag mode: ");  
   Serial1.println(fConfig.mode);
   Serial1.print(" Tag address: ");  
   Serial1.println(fConfig.address);
-  Serial1.print(" Antenna delay: ");
-  Serial1.println(fConfig.adelay);
   Serial1.print(" DW1000 mode: ");
   Serial1.println(fConfig.dw1000Mode);
   Serial1.print(" DW1000 max power: ");
@@ -86,10 +84,8 @@ void printTagConfig() {
     }
     Serial1.println();
   }
+#endif  
 }
-
-#define DEBUG_TRILAT   //prints in trilateration code
-//#define DEBUG_DIST     //print anchor distances
 
 // connection pins
 const uint8_t PIN_RST = PB12; // reset pin
@@ -104,9 +100,6 @@ float last_anchor_distance[N_ANCHORS] = {0.0}; //most recent distance reports
 
 float current_tag_position[2] = {0.0, 0.0}; //global current position (meters with respect to anchor origin)
 float current_distance_rmse = 0.0;  //rms error in distance calc => crude measure of position error (meters).  Needs to be better characterized
-bool fTagPositionDetected = false;
-
-bool fDoPrintDistance = false;
 
 int trilat2D_4A(void) {
 
@@ -126,12 +119,6 @@ int trilat2D_4A(void) {
   // copy distances to local storage
   for (i = 0; i < N_ANCHORS; i++) d[i] = last_anchor_distance[i];
 
-#ifdef DEBUG_TRILAT
-  char line[60];
-  snprintf(line, sizeof line, "d: %6.2f %6.2f %6.2f", d[0], d[1], d[2]);
-  Serial1.println(line);
-#endif
-
   if (first) {  //intermediate fixed vectors
     first = false;
 
@@ -148,11 +135,8 @@ int trilat2D_4A(void) {
     for (i = 1; i < N_ANCHORS; i++) {
       A[i - 1][0] = x[i] - x[0];
       A[i - 1][1] = y[i] - y[0];
-#ifdef DEBUG_TRILAT
-      snprintf(line, sizeof line, "A  %5.2f %5.2f", A[i - 1][0], A[i - 1][1]);
-      Serial1.println(line);
-#endif
     }
+
     float ATA[2][2];  //calculate A transpose A
     // Cij = sum(k) (Aki*Akj)
     for (i = 0; i < 2; i++) {
@@ -161,10 +145,6 @@ int trilat2D_4A(void) {
         for (k = 0; k < N_ANCHORS - 1; k++) ATA[i][j] += A[k][i] * A[k][j];
       }
     }
-#ifdef DEBUG_TRILAT
-    snprintf(line, sizeof line, "ATA %5.2f %5.2f\n    %5.2f %5.2f", ATA[0][0], ATA[0][1], ATA[1][0], ATA[1][1]);
-    Serial1.println(line);
-#endif
 
     //invert ATA
     float det = ATA[0][0] * ATA[1][1] - ATA[1][0] * ATA[0][1];
@@ -172,19 +152,13 @@ int trilat2D_4A(void) {
       Serial1.println("***Singular matrix, check anchor coordinates***");
       while (1) delay(1); //hang
     }
+
     det = 1.0 / det;
     //scale adjoint
     Ainv[0][0] =  det * ATA[1][1];
     Ainv[0][1] = -det * ATA[0][1];
     Ainv[1][0] = -det * ATA[1][0];
     Ainv[1][1] =  det * ATA[0][0];
-#ifdef DEBUG_TRILAT
-    snprintf(line, sizeof line, "Ainv %7.4f %7.4f\n     %7.4f %7.4f", Ainv[0][0], Ainv[0][1], Ainv[1][0], Ainv[1][1]);
-    Serial1.println(line);
-    snprintf(line, sizeof line, "det Ainv %8.3e", det);
-    Serial1.println(line);
-#endif
-
   } //end if (first);
 
   //least squares solution for position
@@ -214,6 +188,8 @@ int trilat2D_4A(void) {
   }
   current_distance_rmse = sqrt(rmse / ((float)N_ANCHORS));
 
+  ap_send_vehicle_position(current_tag_position, current_distance_rmse);
+
   return 1;
 } //end trilat2D_3A
 
@@ -229,7 +205,9 @@ void newRangeRun()
     last_anchor_update[index - 1] = millis();  //decrement index for array index
     float range = DW1000Ranging.getDistantDevice()->getRange();
     last_anchor_distance[index - 1] = range;
-    if (range < 0.0 || range > 30.0)     last_anchor_update[index - 1] = 0;  //error or out of bounds, ignore this measurement
+    
+    if (range < 0.0 || range > 30.0)
+      last_anchor_update[index - 1] = 0;  //error or out of bounds, ignore this measurement
   }
 
   int detected = 0;
@@ -240,24 +218,14 @@ void newRangeRun()
     if (last_anchor_update[i] > 0) detected++;
   }
 
-#ifdef DEBUG_DIST
-    // print distance and age of measurement
-    uint32_t current_time = millis();
-    for (i = 0; i < N_ANCHORS; i++) {
-      Serial1.print(i+1); //ID
-      Serial1.print("> ");
-      Serial1.print(last_anchor_distance[i]);
-      Serial1.print("\t");
-      Serial1.println(current_time - last_anchor_update[i]); //age in millis
-    }
-#endif
-
-  fTagPositionDetected = (detected == 4);
-
-  if (fTagPositionDetected) { //four measurements minimum
+  if (detected == 4) //four measurements minimum
+  {
+    ap_send_beacon_config(N_ANCHORS, fConfig.aMatrix);
+    ap_send_beacon_distance(N_ANCHORS, last_anchor_distance);
 
     trilat2D_4A();
 
+#ifndef TAG_DEBUG
     //output the values (X, Y and error estimate)
     Serial1.print("P= ");
     Serial1.print(current_tag_position[0]);
@@ -265,6 +233,7 @@ void newRangeRun()
     Serial1.print(current_tag_position[1]);
     Serial1.write(',');
     Serial1.println(current_distance_rmse);
+#endif    
   }
 }  //end newRangeRun
 
@@ -315,6 +284,8 @@ const byte *getDw1000Mode() {
 
 void setup() {
   Serial1.begin(115200);
+  fcboardSerial.begin(9600);
+
   delay(1000);
 
   //initialize configuration
@@ -355,8 +326,7 @@ void loop()
 {
   DW1000Ranging.loop();
 
-  sendToArduPilot(N_ANCHORS, fConfig.aMatrix, current_tag_position, current_distance_rmse, fTagPositionDetected, last_anchor_distance);
-
+#ifndef TAG_DEBUG
   if (Serial1.available()) {
     String lStr = Serial1.readString();
     lStr.trim();
@@ -367,7 +337,6 @@ void loop()
       
       if (fConfig.mode == 'C') {
         strcpy(fConfig.address, DEFAULT_ADDRESS);
-        fConfig.adelay = DEFAULT_ANTENNA_DELAY;
       }
      
       saveTagConfig();
@@ -414,14 +383,6 @@ void loop()
       saveTagConfig();
       printTagConfig();
     }
-    else if (lStr == "START_DISTANCE_MONITOR") {
-      fDoPrintDistance = true;
-      Serial1.println("Distance monitoring started...");
-    }
-    else if (lStr == "STOP_DISTANCE_MONITOR") {
-      fDoPrintDistance = false;
-      Serial1.println("Distance monitoring stopped.");
-    }
     else if (lStr == "START_RANGE_FILTER") {
       DW1000Ranging.useRangeFilter(true);
       Serial1.println("Range filter started...");
@@ -430,12 +391,6 @@ void loop()
       DW1000Ranging.useRangeFilter(false);
       Serial1.println("Range filter stopped.");
     }
-    else if (lStr.startsWith("SET_ANTENNA_DELAY=")) {
-      const char *lStrValue = lStr.c_str() + 18;
-      int lValue = atoi(lStrValue);
-      fConfig.adelay = lValue;
-      saveTagConfig();
-      printTagConfig();
-    }
   }
+#endif  
 }
