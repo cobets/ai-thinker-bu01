@@ -16,6 +16,8 @@
 #include <SPI.h>
 #include "DW1000Ranging.h"
 #include "DW1000.h"
+#include "ardupilot.h"
+
 
 #define CONFIG_VALIDATION_KEY 214748361
 #define DEFAULT_ADDRESS "7D:00:22:EA:82:60:3B:9C"
@@ -102,6 +104,7 @@ float last_anchor_distance[N_ANCHORS] = {0.0}; //most recent distance reports
 
 float current_tag_position[2] = {0.0, 0.0}; //global current position (meters with respect to anchor origin)
 float current_distance_rmse = 0.0;  //rms error in distance calc => crude measure of position error (meters).  Needs to be better characterized
+bool fTagPositionDetected = false;
 
 bool fDoPrintDistance = false;
 
@@ -126,7 +129,7 @@ int trilat2D_4A(void) {
 #ifdef DEBUG_TRILAT
   char line[60];
   snprintf(line, sizeof line, "d: %6.2f %6.2f %6.2f", d[0], d[1], d[2]);
-  Serial.println(line);
+  Serial1.println(line);
 #endif
 
   if (first) {  //intermediate fixed vectors
@@ -147,7 +150,7 @@ int trilat2D_4A(void) {
       A[i - 1][1] = y[i] - y[0];
 #ifdef DEBUG_TRILAT
       snprintf(line, sizeof line, "A  %5.2f %5.2f", A[i - 1][0], A[i - 1][1]);
-      Serial.println(line);
+      Serial1.println(line);
 #endif
     }
     float ATA[2][2];  //calculate A transpose A
@@ -160,13 +163,13 @@ int trilat2D_4A(void) {
     }
 #ifdef DEBUG_TRILAT
     snprintf(line, sizeof line, "ATA %5.2f %5.2f\n    %5.2f %5.2f", ATA[0][0], ATA[0][1], ATA[1][0], ATA[1][1]);
-    Serial.println(line);
+    Serial1.println(line);
 #endif
 
     //invert ATA
     float det = ATA[0][0] * ATA[1][1] - ATA[1][0] * ATA[0][1];
     if (fabs(det) < 1.0E-4) {
-      Serial.println("***Singular matrix, check anchor coordinates***");
+      Serial1.println("***Singular matrix, check anchor coordinates***");
       while (1) delay(1); //hang
     }
     det = 1.0 / det;
@@ -177,9 +180,9 @@ int trilat2D_4A(void) {
     Ainv[1][1] =  det * ATA[0][0];
 #ifdef DEBUG_TRILAT
     snprintf(line, sizeof line, "Ainv %7.4f %7.4f\n     %7.4f %7.4f", Ainv[0][0], Ainv[0][1], Ainv[1][0], Ainv[1][1]);
-    Serial.println(line);
+    Serial1.println(line);
     snprintf(line, sizeof line, "det Ainv %8.3e", det);
-    Serial.println(line);
+    Serial1.println(line);
 #endif
 
   } //end if (first);
@@ -241,25 +244,27 @@ void newRangeRun()
     // print distance and age of measurement
     uint32_t current_time = millis();
     for (i = 0; i < N_ANCHORS; i++) {
-      Serial.print(i+1); //ID
-      Serial.print("> ");
-      Serial.print(last_anchor_distance[i]);
-      Serial.print("\t");
-      Serial.println(current_time - last_anchor_update[i]); //age in millis
+      Serial1.print(i+1); //ID
+      Serial1.print("> ");
+      Serial1.print(last_anchor_distance[i]);
+      Serial1.print("\t");
+      Serial1.println(current_time - last_anchor_update[i]); //age in millis
     }
 #endif
 
-  if ( detected == 4) { //four measurements minimum
+  fTagPositionDetected = (detected == 4);
+
+  if (fTagPositionDetected) { //four measurements minimum
 
     trilat2D_4A();
 
     //output the values (X, Y and error estimate)
-    Serial.print("P= ");
-    Serial.print(current_tag_position[0]);
-    Serial.write(',');
-    Serial.print(current_tag_position[1]);
-    Serial.write(',');
-    Serial.println(current_distance_rmse);
+    Serial1.print("P= ");
+    Serial1.print(current_tag_position[0]);
+    Serial1.write(',');
+    Serial1.print(current_tag_position[1]);
+    Serial1.write(',');
+    Serial1.println(current_distance_rmse);
   }
 }  //end newRangeRun
 
@@ -350,6 +355,8 @@ void loop()
 {
   DW1000Ranging.loop();
 
+  sendToArduPilot(N_ANCHORS, fConfig.aMatrix, current_tag_position, current_distance_rmse, fTagPositionDetected, last_anchor_distance);
+
   if (Serial1.available()) {
     String lStr = Serial1.readString();
     lStr.trim();
@@ -372,23 +379,23 @@ void loop()
       saveTagConfig();
       NVIC_SystemReset();
     }
-    else if (lStr.startsWith("ANCHOR1_XYZ=")) {
-      setAnchorMatrix(0, lStr, 12);
+    else if (lStr.startsWith("SET_ANCHOR1_XYZ=")) {
+      setAnchorMatrix(0, lStr, 16);
       saveTagConfig();
       printTagConfig();
     }
-    else if (lStr.startsWith("ANCHOR2_XYZ=")) {
-      setAnchorMatrix(1, lStr, 12);
+    else if (lStr.startsWith("SET_ANCHOR2_XYZ=")) {
+      setAnchorMatrix(1, lStr, 16);
       saveTagConfig();
       printTagConfig();
     }
-    else if (lStr.startsWith("ANCHOR3_XYZ=")) {
-      setAnchorMatrix(2, lStr, 12);
+    else if (lStr.startsWith("SET_ANCHOR3_XYZ=")) {
+      setAnchorMatrix(2, lStr, 16);
       saveTagConfig();
       printTagConfig();
     }
-    else if (lStr.startsWith("ANCHOR4_XYZ=")) {
-      setAnchorMatrix(3, lStr, 12);
+    else if (lStr.startsWith("SET_ANCHOR4_XYZ=")) {
+      setAnchorMatrix(3, lStr, 16);
       saveTagConfig();
       printTagConfig();
     }
