@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include "SoftwareSerial.h"
 
 #define MSG_HEADER          0x01
 #define MSGID_BEACON_CONFIG 0x02
@@ -35,9 +34,6 @@ union vehicle_position_msg {
 };
 ////////////////////////////////////////////////
 
-// Serial Output to Flight controller
-SoftwareSerial fcboardSerial(PB8, PB9); // rx, tx
-
 void send_message(uint8_t msg_id, uint8_t data_len, uint8_t data_buf[])
 {
     // sanity check
@@ -58,12 +54,12 @@ void send_message(uint8_t msg_id, uint8_t data_len, uint8_t data_buf[])
 
     // send message
     int16_t num_sent = 0;
-    num_sent += fcboardSerial.write(MSG_HEADER);
-    num_sent += fcboardSerial.write(msg_id);
-    num_sent += fcboardSerial.write(msg_len);
-    num_sent += fcboardSerial.write(data_buf, data_len);
-    num_sent += fcboardSerial.write(&checksum, 1);
-    fcboardSerial.flush();
+    num_sent += Serial1.write(MSG_HEADER);
+    num_sent += Serial1.write(msg_id);
+    num_sent += Serial1.write(msg_len);
+    num_sent += Serial1.write(data_buf, data_len);
+    num_sent += Serial1.write(&checksum, 1);
+    Serial1.flush();
 }
 
 // send a beacon's distance to ardupilot

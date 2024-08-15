@@ -17,6 +17,7 @@
 #include "DW1000Ranging.h"
 #include "DW1000.h"
 #include "ardupilot.h"
+#include "SoftwareSerial.h"
 
 // #define TAG_DEBUG
 
@@ -64,25 +65,27 @@ void saveTagConfig() {
   EEPROM.put(0, fConfig);
 }
 
+SoftwareSerial fSerialUI(PB8, PB9); // rx, tx
+
 void printTagConfig() {
 #ifndef TAG_DEBUG
-  Serial1.print(" Tag mode: ");  
-  Serial1.println(fConfig.mode);
-  Serial1.print(" Tag address: ");  
-  Serial1.println(fConfig.address);
-  Serial1.print(" DW1000 mode: ");
-  Serial1.println(fConfig.dw1000Mode);
-  Serial1.print(" DW1000 max power: ");
-  Serial1.println(fConfig.dw100MaxPower);
+  fSerialUI.print(" Tag mode: ");  
+  fSerialUI.println(fConfig.mode);
+  fSerialUI.print(" Tag address: ");  
+  fSerialUI.println(fConfig.address);
+  fSerialUI.print(" DW1000 mode: ");
+  fSerialUI.println(fConfig.dw1000Mode);
+  fSerialUI.print(" DW1000 max power: ");
+  fSerialUI.println(fConfig.dw100MaxPower);
 
-  Serial1.println(" Anchor coordinate matrix: ");
+  fSerialUI.println(" Anchor coordinate matrix: ");
   
   for (int i = 0; i < N_ANCHORS; i++) {
     for (int j = 0; j <= 2; j++) {
-      Serial1.print(fConfig.aMatrix[i][j]);
-      Serial1.print(", ");
+      fSerialUI.print(fConfig.aMatrix[i][j]);
+      fSerialUI.print(", ");
     }
-    Serial1.println();
+    fSerialUI.println();
   }
 #endif  
 }
@@ -91,6 +94,7 @@ void printTagConfig() {
 const uint8_t PIN_RST = PB12; // reset pin
 const uint8_t PIN_IRQ = PB0;  // irq pin
 const uint8_t PIN_SS = PA4;   // spi select pin
+// const uint8_t PIN_BTN = PA0;  // button pin
 
 // variables for position determination
 #define ANCHOR_DISTANCE_EXPIRED 5000   //measurements older than this are ignore (milliseconds) 
@@ -149,7 +153,7 @@ int trilat2D_4A(void) {
     //invert ATA
     float det = ATA[0][0] * ATA[1][1] - ATA[1][0] * ATA[0][1];
     if (fabs(det) < 1.0E-4) {
-      Serial1.println("***Singular matrix, check anchor coordinates***");
+      fSerialUI.println("***Singular matrix, check anchor coordinates***");
       while (1) delay(1); //hang
     }
 
@@ -227,12 +231,12 @@ void newRangeRun()
 
 #ifndef TAG_DEBUG
     //output the values (X, Y and error estimate)
-    Serial1.print("P= ");
-    Serial1.print(current_tag_position[0]);
-    Serial1.write(',');
-    Serial1.print(current_tag_position[1]);
-    Serial1.write(',');
-    Serial1.println(current_distance_rmse);
+    fSerialUI.print("P= ");
+    fSerialUI.print(current_tag_position[0]);
+    fSerialUI.write(',');
+    fSerialUI.print(current_tag_position[1]);
+    fSerialUI.write(',');
+    fSerialUI.println(current_distance_rmse);
 #endif    
   }
 }  //end newRangeRun
@@ -241,7 +245,7 @@ void newRange()
 {
   if (fConfig.mode == 'C') {
     // Calibrate mode
-    Serial1.println(DW1000Ranging.getDistantDevice()->getRange());
+    fSerialUI.println(DW1000Ranging.getDistantDevice()->getRange());
   }
   else if (fConfig.mode == 'R') {
     // Run mode
@@ -251,14 +255,14 @@ void newRange()
 
 void newDevice(DW1000Device *device)
 {
-  Serial1.print("Device added: ");
-  Serial1.println(device->getShortAddress(), HEX);
+  fSerialUI.print("Device added: ");
+  fSerialUI.println(device->getShortAddress(), HEX);
 }
 
 void inactiveDevice(DW1000Device *device)
 {
-  Serial1.print("Deleted inactive device: ");
-  Serial1.println(device->getShortAddress(), HEX);
+  fSerialUI.print("Deleted inactive device: ");
+  fSerialUI.println(device->getShortAddress(), HEX);
 }
 
 const byte *getDw1000Mode() {
@@ -283,9 +287,8 @@ const byte *getDw1000Mode() {
 }
 
 void setup() {
+  fSerialUI.begin(4800);
   Serial1.begin(115200);
-  fcboardSerial.begin(9600);
-
   delay(1000);
 
   //initialize configuration
@@ -327,8 +330,8 @@ void loop()
   DW1000Ranging.loop();
 
 #ifndef TAG_DEBUG
-  if (Serial1.available()) {
-    String lStr = Serial1.readString();
+  if (fSerialUI.available()) {
+    String lStr = fSerialUI.readString();
     lStr.trim();
     
     if (lStr.startsWith("SET_MODE=")) {
@@ -385,11 +388,11 @@ void loop()
     }
     else if (lStr == "START_RANGE_FILTER") {
       DW1000Ranging.useRangeFilter(true);
-      Serial1.println("Range filter started...");
+      fSerialUI.println("Range filter started...");
     }
     else if (lStr == "STOP_RANGE_FILTER") {
       DW1000Ranging.useRangeFilter(false);
-      Serial1.println("Range filter stopped.");
+      fSerialUI.println("Range filter stopped.");
     }
   }
 #endif  
