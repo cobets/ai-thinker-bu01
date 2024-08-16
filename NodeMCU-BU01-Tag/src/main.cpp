@@ -94,6 +94,9 @@ void printTagConfig() {
 const uint8_t PIN_RST = PB12; // reset pin
 const uint8_t PIN_IRQ = PB0;  // irq pin
 const uint8_t PIN_SS = PA4;   // spi select pin
+#define LED_OK PA1            // GOOD indicator led
+#define LED_BAD PA2           // BAD indicator led
+
 // const uint8_t PIN_BTN = PA0;  // button pin
 
 // variables for position determination
@@ -229,6 +232,7 @@ void newRangeRun()
 
     trilat2D_4A();
 
+    digitalWrite(LED_OK, HIGH);
 #ifndef TAG_DEBUG
     //output the values (X, Y and error estimate)
     fSerialUI.print("P= ");
@@ -237,7 +241,8 @@ void newRangeRun()
     fSerialUI.print(current_tag_position[1]);
     fSerialUI.write(',');
     fSerialUI.println(current_distance_rmse);
-#endif    
+#endif
+    digitalWrite(LED_OK, LOW);
   }
 }  //end newRangeRun
 
@@ -255,14 +260,18 @@ void newRange()
 
 void newDevice(DW1000Device *device)
 {
+  digitalWrite(LED_OK, HIGH);
   fSerialUI.print("Device added: ");
   fSerialUI.println(device->getShortAddress(), HEX);
+  digitalWrite(LED_OK, LOW);
 }
 
 void inactiveDevice(DW1000Device *device)
 {
+  digitalWrite(LED_BAD, HIGH);
   fSerialUI.print("Deleted inactive device: ");
   fSerialUI.println(device->getShortAddress(), HEX);
+  digitalWrite(LED_BAD, LOW);
 }
 
 const byte *getDw1000Mode() {
@@ -287,6 +296,9 @@ const byte *getDw1000Mode() {
 }
 
 void setup() {
+  pinMode(LED_OK, OUTPUT);
+  pinMode(LED_BAD, OUTPUT);
+
   fSerialUI.begin(4800);
   Serial1.begin(115200);
   delay(1000);
