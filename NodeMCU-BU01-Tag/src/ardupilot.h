@@ -19,9 +19,10 @@ union beacon_config_msg {
 union beacon_distance_msg {
     struct {
         uint8_t beacon_id;
-        uint32_t distance;
+        int32_t x;
+        int32_t y;
     } info;
-    uint8_t buf[5];
+    uint8_t buf[9];
 };
 union vehicle_position_msg {
     struct {
@@ -63,11 +64,12 @@ void send_message(uint8_t msg_id, uint8_t data_len, uint8_t data_buf[])
 }
 
 // send a beacon's distance to ardupilot
-void send_beacon_distance(uint8_t beacon_id, uint32_t distance_mm)
+void send_beacon_distance(uint8_t beacon_id, int32_t distance_mm)
 {
     beacon_distance_msg msg;
     msg.info.beacon_id = beacon_id;
-    msg.info.distance = distance_mm;
+    msg.info.x = distance_mm;
+    
     send_message(MSGID_BEACON_DIST, sizeof(msg.buf), msg.buf);
 }
 

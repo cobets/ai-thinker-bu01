@@ -240,7 +240,11 @@ void newRangeRun()
     fSerialUI.write(',');
     fSerialUI.print(current_tag_position[1]);
     fSerialUI.write(',');
-    fSerialUI.println(current_distance_rmse);
+    fSerialUI.print(current_distance_rmse);
+    fSerialUI.print(" AD");
+    fSerialUI.print(index);
+    fSerialUI.write('=');
+    fSerialUI.println(last_anchor_distance[index - 1]);
 #endif
     digitalWrite(LED_OK, LOW);
   }
