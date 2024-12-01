@@ -7,7 +7,7 @@
 
 // structure for messages uploaded to ardupilot
 union beacon_config_msg {
-    struct {
+    struct __attribute__((__packed__)) {
         uint8_t beacon_id;
         uint8_t beacon_count;
         int32_t x;
@@ -17,15 +17,14 @@ union beacon_config_msg {
     uint8_t buf[14];
 };
 union beacon_distance_msg {
-    struct {
+    struct __attribute__((__packed__)) {
         uint8_t beacon_id;
-        int32_t x;
-        int32_t y;
+        uint32_t distance;
     } info;
-    uint8_t buf[9];
+    uint8_t buf[5];
 };
 union vehicle_position_msg {
-    struct {
+    struct __attribute__((__packed__)) {
         int32_t x;
         int32_t y;
         int32_t z;
@@ -33,9 +32,10 @@ union vehicle_position_msg {
     } info;
     uint8_t buf[14];
 };
+
 ////////////////////////////////////////////////
 
-void send_message(uint8_t msg_id, uint8_t data_len, uint8_t data_buf[])
+void send_message(int8_t msg_id, uint8_t data_len, uint8_t data_buf[])
 {
     // sanity check
     if (data_len == 0) {
@@ -64,17 +64,17 @@ void send_message(uint8_t msg_id, uint8_t data_len, uint8_t data_buf[])
 }
 
 // send a beacon's distance to ardupilot
-void send_beacon_distance(uint8_t beacon_id, int32_t distance_mm)
+void send_beacon_distance(uint8_t beacon_id, uint32_t distance_mm)
 {
     beacon_distance_msg msg;
     msg.info.beacon_id = beacon_id;
-    msg.info.x = distance_mm;
+    msg.info.distance = distance_mm;
     
     send_message(MSGID_BEACON_DIST, sizeof(msg.buf), msg.buf);
 }
 
 // send vehicle's position to ardupilot
-void send_vehicle_position(int32_t x, int32_t y, float pos_error)
+void send_vehicle_position(int32_t x, int32_t y, int16_t pos_error)
 {
     vehicle_position_msg msg;
     

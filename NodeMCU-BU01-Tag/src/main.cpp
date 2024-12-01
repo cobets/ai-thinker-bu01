@@ -19,8 +19,6 @@
 #include "ardupilot.h"
 #include "SoftwareSerial.h"
 
-// #define TAG_DEBUG
-
 #define CONFIG_VALIDATION_KEY 214748360
 #define DEFAULT_ADDRESS "7D:00:22:EA:82:60:3B:9C"
 // #define DEFAULT_ANTENNA_DELAY 16384
@@ -40,7 +38,7 @@ struct TagConfig {
                                   // 5 - MODE_LONGDATA_FAST_ACCURACY
                                   // 6 - MODE_LONGDATA_RANGE_ACCURACY
                                   // 7 - MODE_LONGDATA_RANGE_ACCURACY2
-  bool     dw100MaxPower; // use max available DW1000 power (can violate regulation)
+  bool     dw100MaxPower;         // use max available DW1000 power (can violate regulation)
 };
 
 TagConfig fConfig;
@@ -68,7 +66,6 @@ void saveTagConfig() {
 SoftwareSerial fSerialUI(PB8, PB9); // rx, tx
 
 void printTagConfig() {
-#ifndef TAG_DEBUG
   fSerialUI.print(" Tag mode: ");  
   fSerialUI.println(fConfig.mode);
   fSerialUI.print(" Tag address: ");  
@@ -87,7 +84,6 @@ void printTagConfig() {
     }
     fSerialUI.println();
   }
-#endif  
 }
 
 // connection pins
@@ -100,13 +96,14 @@ const uint8_t PIN_SS = PA4;   // spi select pin
 // const uint8_t PIN_BTN = PA0;  // button pin
 
 // variables for position determination
-#define ANCHOR_DISTANCE_EXPIRED 5000   //measurements older than this are ignore (milliseconds) 
+#define ANCHOR_DISTANCE_EXPIRED 75  //measurements older than this are ignore (milliseconds) 
 
 uint32_t last_anchor_update[N_ANCHORS] = {0}; //millis() value last time anchor was seen
 float last_anchor_distance[N_ANCHORS] = {0.0}; //most recent distance reports
 
 float current_tag_position[2] = {0.0, 0.0}; //global current position (meters with respect to anchor origin)
 float current_distance_rmse = 0.0;  //rms error in distance calc => crude measure of position error (meters).  Needs to be better characterized
+bool trace = false; // display trace info
 
 int trilat2D_4A(void) {
 
@@ -232,21 +229,24 @@ void newRangeRun()
 
     trilat2D_4A();
 
-    digitalWrite(LED_OK, HIGH);
-#ifndef TAG_DEBUG
-    //output the values (X, Y and error estimate)
-    fSerialUI.print("P= ");
-    fSerialUI.print(current_tag_position[0]);
-    fSerialUI.write(',');
-    fSerialUI.print(current_tag_position[1]);
-    fSerialUI.write(',');
-    fSerialUI.print(current_distance_rmse);
-    fSerialUI.print(" AD");
-    fSerialUI.print(index);
-    fSerialUI.write('=');
-    fSerialUI.println(last_anchor_distance[index - 1]);
-#endif
-    digitalWrite(LED_OK, LOW);
+    if (trace) {
+      digitalWrite(LED_OK, HIGH);
+      //output the values (X, Y and error estimate)
+      fSerialUI.print("P=");
+      fSerialUI.print(current_tag_position[0]);
+      fSerialUI.write(',');
+      fSerialUI.print(current_tag_position[1]);
+      fSerialUI.write(',');
+      fSerialUI.print(current_distance_rmse);
+      fSerialUI.print(" AD");
+      fSerialUI.print(index);
+      fSerialUI.write('=');
+      fSerialUI.println(last_anchor_distance[index - 1]);    
+      digitalWrite(LED_OK, LOW);
+    }
+    else {
+      digitalWrite(LED_OK, !digitalRead(LED_OK));
+    }
   }
 }  //end newRangeRun
 
@@ -345,7 +345,6 @@ void loop()
 {
   DW1000Ranging.loop();
 
-#ifndef TAG_DEBUG
   if (fSerialUI.available()) {
     String lStr = fSerialUI.readString();
     lStr.trim();
@@ -393,6 +392,9 @@ void loop()
       saveTagConfig();
       NVIC_SystemReset();
     }
+    else if (lStr == "TRACE") {
+      trace = true;
+    }
     else if (lStr == "REBOOT") {
       NVIC_SystemReset();
     }
@@ -411,5 +413,4 @@ void loop()
       fSerialUI.println("Range filter stopped.");
     }
   }
-#endif  
 }
